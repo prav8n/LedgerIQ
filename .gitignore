@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.deps/
+*.pyd
+*.sqlite3
+*.db
+.venv/
+venv/
+env/
+
+# FastAPI
+.env
+
+# Node
+node_modules/
+dist/
+build/
+
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+*.tar
+
+# Testing
+.coverage
+.pytest_cache/
+
+# Misc
+*.swp

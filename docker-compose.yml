@@ -1,0 +1,62 @@
+# LedgerIQ — full stack: postgres + backend (FastAPI) + frontend (SPA) + nginx proxy.
+# Configure via a root .env file (see .env.example). Run: docker compose up --build
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ledgeriq}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ledgeriq}
+      POSTGRES_DB: ${POSTGRES_DB:-ledgeriq}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ledgeriq} -d ${POSTGRES_DB:-ledgeriq}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [appnet]
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ledgeriq}:${POSTGRES_PASSWORD:-ledgeriq}@postgres:5432/${POSTGRES_DB:-ledgeriq}
+      JWT_SECRET: ${JWT_SECRET:-CHANGE_ME_IN_PRODUCTION}
+      ENVIRONMENT: production
+      DEBUG: "false"
+      ENABLE_SCHEDULER: "true"
+      # Browser hits the API same-origin via nginx, but set this for safety.
+      CORS_ORIGINS: ${PUBLIC_ORIGIN:-http://localhost}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [appnet]
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: /api/v1
+    networks: [appnet]
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "${HTTP_PORT:-80}:80"
+    depends_on:
+      - backend
+      - frontend
+    networks: [appnet]
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+
+networks:
+  appnet:
+    driver: bridge
