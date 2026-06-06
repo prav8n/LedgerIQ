@@ -26,6 +26,113 @@ export interface IncomeInput {
   notes?: string | null;
 }
 
+// ---------------- Credit cards & reward rules ----------------
+export interface RewardRule {
+  id: number;
+  card_id: number;
+  rule_name: string;
+  reward_type: string;
+  reward_rate: string;
+  point_value: string | null;
+  applies_to: string;
+  merchant_match: string | null;
+  category_match: string | null;
+  min_txn_amount: string | null;
+  monthly_cap: string | null;
+  milestone_threshold: string | null;
+  milestone_reward: string | null;
+  notes: string | null;
+}
+export interface RewardRuleInput {
+  rule_name: string;
+  reward_type: string;
+  reward_rate: number;
+  point_value?: number | null;
+  applies_to: string;
+  merchant_match?: string | null;
+  category_match?: string | null;
+  min_txn_amount?: number | null;
+  monthly_cap?: number | null;
+  milestone_threshold?: number | null;
+  milestone_reward?: number | null;
+  notes?: string | null;
+}
+export interface RuleEarning {
+  rule_id: number;
+  rule_name: string;
+  reward_type: string;
+  reward_units: string;
+  reward_value_inr: string;
+  monthly_cap: string | null;
+  capped: boolean;
+}
+export interface MilestoneProgress {
+  rule_id: number;
+  rule_name: string;
+  threshold: string;
+  progress: string;
+  reward: string | null;
+  met: boolean;
+  percent: number;
+}
+export interface FeeWaiverProgress {
+  threshold: string;
+  spent: string;
+  met: boolean;
+  percent: number;
+}
+export interface CardRewardSummary {
+  month_label: string;
+  month_spend: string;
+  total_reward_value_inr: string;
+  earnings: RuleEarning[];
+  milestones: MilestoneProgress[];
+  fee_waiver: FeeWaiverProgress | null;
+  benefits: string[];
+}
+export interface CreditCard {
+  id: number;
+  card_name: string;
+  issuer: string;
+  network: string;
+  last_four: string | null;
+  card_color: string | null;
+  credit_limit: string;
+  current_balance: string;
+  statement_day: number | null;
+  due_day: number | null;
+  billing_cycle_day: number | null;
+  interest_rate: string | null;
+  annual_fee: string;
+  fee_waiver_spend_threshold: string | null;
+  reward_type: string;
+  reward_rate: string;
+  valid_thru: string | null;
+  is_active: boolean;
+  reward_rules: RewardRule[];
+  available_credit: string;
+  utilization_percent: number;
+  next_statement_date: string | null;
+  next_due_date: string | null;
+  reward_summary: CardRewardSummary;
+}
+export interface CreditCardInput {
+  card_name: string;
+  issuer: string;
+  network?: string;
+  last_four?: string | null;
+  card_color?: string | null;
+  credit_limit?: number;
+  current_balance?: number;
+  statement_day?: number | null;
+  due_day?: number | null;
+  billing_cycle_day?: number | null;
+  annual_fee?: number;
+  fee_waiver_spend_threshold?: number | null;
+  is_active?: boolean;
+  reward_rules?: RewardRuleInput[];
+}
+
 // ---------------- Budgets ----------------
 export interface Budget {
   id: number;

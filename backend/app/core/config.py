@@ -119,6 +119,21 @@ class Settings(BaseSettings):
     # Lead time (days) for "due soon" reminders.
     EMI_DUE_REMINDER_DAYS: int = 5
 
+    # -------------------------------------------------------------- LLM (AI)
+    # When LLM_API_KEY is unset, both AI services gracefully fall back to the
+    # rule-based implementations. The key lives in the backend .env ONLY.
+    LLM_PROVIDER: str = "anthropic"
+    LLM_API_KEY: str | None = None
+    LLM_MODEL: str = "claude-haiku-4-5-20251001"
+    LLM_TIMEOUT_SECONDS: float = 20.0
+    # Scheduled refresh of LLM insights (only runs when a key is configured).
+    LLM_INSIGHTS_ENABLED: bool = True
+    LLM_INSIGHTS_DAY_OF_WEEK: str = "mon"
+    LLM_INSIGHTS_HOUR: int = 7
+    LLM_INSIGHTS_PERIOD: Literal["weekly", "monthly", "yearly"] = "monthly"
+    # How long a cached LLM insight set is served before falling back to rules.
+    LLM_INSIGHTS_TTL_DAYS: int = 8
+
 
 @lru_cache
 def get_settings() -> Settings:

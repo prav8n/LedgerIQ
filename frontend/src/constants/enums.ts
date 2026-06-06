@@ -31,6 +31,15 @@ export const frequencies = opts([
 
 export const cardNetworks = opts(['visa', 'mastercard', 'rupay', 'amex', 'diners', 'other']);
 export const cardRewardTypes = opts(['cashback', 'points', 'miles', 'none']);
+
+// Per-rule reward types and what spend they apply to (Phase 10 rewards engine).
+export const rewardTypes = opts([
+  'cashback', 'reward_points', 'air_miles', 'milestone_bonus',
+  'lounge_access', 'fee_waiver', 'voucher',
+]);
+export const rewardAppliesTo = opts([
+  'all', 'online', 'offline', 'upi', 'merchant_specific', 'category_specific',
+]);
 export const budgetPeriods = opts(['weekly', 'monthly', 'quarterly', 'yearly']);
 
 export const goalCategories = opts([

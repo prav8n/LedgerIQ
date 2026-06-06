@@ -3,6 +3,8 @@ import { makeCrudService } from '@/services/crud';
 import type {
   Budget,
   BudgetInput,
+  CreditCard,
+  CreditCardInput,
   EMI,
   EMIInput,
   Goal,
@@ -23,6 +25,12 @@ import type {
 export const incomeService = makeCrudService<Income, IncomeInput, Partial<IncomeInput>>(
   '/income',
 );
+
+export const creditCardService = makeCrudService<
+  CreditCard,
+  CreditCardInput,
+  Partial<CreditCardInput>
+>('/credit-cards');
 
 export const budgetService = makeCrudService<Budget, BudgetInput, Partial<BudgetInput>>(
   '/budgets',
