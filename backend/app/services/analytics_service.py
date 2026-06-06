@@ -30,7 +30,8 @@ async def _window_aggregates(db, uid, start, end) -> dict:
                          Expense.transaction_date >= start, Expense.transaction_date <= end)
     cashback = await _sum(db, Expense.cashback_amount, Expense.user_id == uid,
                           Expense.transaction_date >= start, Expense.transaction_date <= end)
-    savings = money(income - expense)
+    # Cashback offsets spend, so it counts toward savings.
+    savings = money(income - expense + cashback)
     return {
         "income": income,
         "expense": expense,

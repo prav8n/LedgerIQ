@@ -8,6 +8,7 @@ export interface Expense {
   payment_method: string;
   transaction_date: string;
   credit_card_id: number | null;
+  reward_rule_id: number | null;
   is_online: boolean;
   is_recurring: boolean;
   is_ai_categorized: boolean;
@@ -27,6 +28,7 @@ export interface ExpenseInput {
   payment_method: string;
   transaction_date: string;
   credit_card_id?: number | null;
+  reward_rule_id?: number | null;
   is_online?: boolean;
   is_recurring?: boolean;
   notes?: string | null;

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import {
   Box,
   Button,
@@ -40,6 +40,7 @@ import {
   useExpenses,
   useUpdateExpense,
 } from '@/hooks/useExpenses';
+import { creditCardHooks } from '@/hooks/financeHooks';
 import { useToast } from '@/hooks/useToast';
 import { getErrorMessage } from '@/services/api';
 import { expenseCategories, paymentMethods } from '@/constants/enums';
@@ -53,6 +54,8 @@ interface FormValues {
   merchant: string;
   description: string;
   payment_method: string;
+  credit_card_id: string; // '' => none
+  reward_rule_id: string; // '' => auto (best match)
   is_online: boolean;
   is_recurring: boolean;
 }
@@ -66,6 +69,8 @@ const emptyForm = (): FormValues => ({
   merchant: '',
   description: '',
   payment_method: 'upi',
+  credit_card_id: '',
+  reward_rule_id: '',
   is_online: false,
   is_recurring: false,
 });
@@ -102,6 +107,22 @@ export function ExpensesPage() {
     defaultValues: emptyForm(),
   });
 
+  // Credit cards, so a card-paid expense can be linked to the card that earns
+  // the cashback / reward points.
+  const { data: cards } = creditCardHooks.useList();
+  const cardOptions = (cards ?? []).map((c) => ({ value: String(c.id), label: c.card_name }));
+  const paymentMethod = useWatch({ control, name: 'payment_method' });
+  const creditCardId = useWatch({ control, name: 'credit_card_id' });
+
+  // Per-transaction reward rules of the chosen card, so the user can force one
+  // (e.g. "10% PhonePe" vs the generic "1% UPI") when the engine can't tell.
+  const TXN_REWARD = new Set(['cashback', 'reward_points', 'air_miles']);
+  const selectedCard = (cards ?? []).find((c) => String(c.id) === creditCardId);
+  const ruleOptions = (selectedCard?.reward_rules ?? [])
+    .filter((r) => TXN_REWARD.has(r.reward_type))
+    .map((r) => ({ value: String(r.id), label: r.rule_name }));
+  const validRuleIds = new Set(ruleOptions.map((o) => o.value));
+
   useEffect(() => {
     if (!formOpen) return;
     reset(
@@ -113,6 +134,10 @@ export function ExpensesPage() {
             merchant: editing.merchant ?? '',
             description: editing.description ?? '',
             payment_method: editing.payment_method,
+            credit_card_id:
+              editing.credit_card_id != null ? String(editing.credit_card_id) : '',
+            reward_rule_id:
+              editing.reward_rule_id != null ? String(editing.reward_rule_id) : '',
             is_online: editing.is_online,
             is_recurring: editing.is_recurring,
           }
@@ -137,6 +162,16 @@ export function ExpensesPage() {
       merchant: values.merchant || null,
       description: values.description || null,
       payment_method: values.payment_method,
+      credit_card_id:
+        values.payment_method === 'credit_card' && values.credit_card_id
+          ? Number(values.credit_card_id)
+          : null,
+      reward_rule_id:
+        values.payment_method === 'credit_card' &&
+        values.reward_rule_id &&
+        validRuleIds.has(values.reward_rule_id)
+          ? Number(values.reward_rule_id)
+          : null,
       is_online: values.is_online,
       is_recurring: values.is_recurring,
     };
@@ -339,8 +374,36 @@ export function ExpensesPage() {
           <RHFTextField control={control} name="merchant" label="Merchant" />
           <RHFTextField control={control} name="description" label="Description" />
           <RHFSelect control={control} name="payment_method" label="Payment method" options={paymentMethods} />
+          {paymentMethod === 'credit_card' && (
+            <RHFSelect
+              control={control}
+              name="credit_card_id"
+              label="Credit card"
+              options={cardOptions}
+              emptyLabel={cardOptions.length ? 'No card' : 'Add a card first'}
+            />
+          )}
+          {paymentMethod === 'credit_card' && ruleOptions.length > 0 && (
+            <RHFSelect
+              control={control}
+              name="reward_rule_id"
+              label="Reward rule"
+              options={ruleOptions}
+              emptyLabel="Auto (best match)"
+            />
+          )}
           <Stack direction="row" spacing={2}>
-            <RHFSwitch control={control} name="is_online" label="Online" />
+            <RHFSwitch
+              control={control}
+              name="is_online"
+              label="Online"
+              info={
+                'Was this an online / e-commerce purchase?\n\n' +
+                'It only affects credit-card reward rules that apply to online spend ' +
+                '(e.g. “5% cashback online”). Leave it OFF for in-store or cash payments — ' +
+                'for cash it has no effect.'
+              }
+            />
             <RHFSwitch control={control} name="is_recurring" label="Recurring" />
           </Stack>
         </Stack>

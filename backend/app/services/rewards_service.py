@@ -73,15 +73,32 @@ async def build_card_summary(
         )
     ).scalars().all()
 
+    # Accumulate per-rule units the same way the engine books them: an expense
+    # with a forced reward_rule_id uses only that rule; otherwise every rule it
+    # qualifies for applies.
+    txn_rules = [r for r in rules if r.is_transactional]
+    by_id = {r.id: r for r in txn_rules}
+    units_by_rule: dict[int, Decimal] = {r.id: _ZERO for r in txn_rules}
+    for exp in month_expenses:
+        ctx = _ctx(exp)
+        chosen = getattr(exp, "reward_rule_id", None)
+        if chosen is not None and chosen in by_id:
+            forced = by_id[chosen]
+            meets_min = (
+                forced.min_txn_amount is None or ctx.amount >= forced.min_txn_amount
+            )
+            applicable = [forced] if meets_min else []
+        else:
+            applicable = [r for r in txn_rules if r.spend_qualifies(ctx)]
+        for rule in applicable:
+            units_by_rule[rule.id] += rule.reward_units(ctx.amount)
+
     earnings: list[dict] = []
     total_value = _ZERO
-    for rule in rules:
-        if not rule.is_transactional:
-            continue
-        units = _ZERO
-        for exp in month_expenses:
-            if rule.spend_qualifies(_ctx(exp)):
-                units += rule.reward_units(Decimal(str(exp.amount)))
+    for rule in txn_rules:
+        units = units_by_rule[rule.id]
+        if units <= _ZERO:
+            continue  # only show rules that actually earned this month
         capped = rule.monthly_cap is not None and units > rule.monthly_cap
         if capped:
             units = rule.monthly_cap

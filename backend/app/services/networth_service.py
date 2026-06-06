@@ -20,6 +20,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.credit_card import CreditCard
 from app.models.emi import EMI
+from app.models.expense import Expense
+from app.models.income import Income
 from app.models.investment import Investment
 from app.models.net_worth import NetWorthSnapshot
 from app.services import emi_service
@@ -59,6 +61,18 @@ async def compute(
     credit_card_debt = await _sum(
         db, CreditCard.current_balance, CreditCard.user_id == user_id
     )
+
+    # Liquid cash flow from tracked activity: all income received, minus expenses
+    # paid from cash/bank (NOT credit-card spend — that lives in credit_card_debt,
+    # so counting it here too would be double-counting). Added to any manual cash.
+    income_total = await _sum(db, Income.amount, Income.user_id == user_id)
+    non_cc_expense_total = await _sum(
+        db,
+        Expense.amount,
+        Expense.user_id == user_id,
+        Expense.credit_card_id.is_(None),
+    )
+    cash = money(Decimal(str(cash)) + income_total - non_cc_expense_total)
 
     # EMI outstanding is a derived value, so sum it in Python.
     emis = (

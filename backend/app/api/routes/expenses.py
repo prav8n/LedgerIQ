@@ -62,6 +62,23 @@ async def _get_owned_card(
     return card
 
 
+async def _adjust_card_balance(
+    db: SessionDep, user_id: int, card_id: int | None, delta: Decimal
+) -> None:
+    """Apply a signed change to a card's outstanding balance (floored at 0).
+
+    Adding a card-paid expense raises the outstanding (and utilization);
+    deleting/editing reverses it.
+    """
+    if not card_id or delta == 0:
+        return
+    card = await db.get(CreditCard, card_id)
+    if card is None or card.user_id != user_id:
+        return
+    new_balance = Decimal(str(card.current_balance)) + Decimal(str(delta))
+    card.current_balance = new_balance if new_balance > 0 else Decimal("0")
+
+
 def _spend_context(expense: Expense) -> SpendContext:
     return SpendContext(
         amount=Decimal(str(expense.amount)),
@@ -116,6 +133,7 @@ async def create_expense(
         payment_method=payload.payment_method,
         transaction_date=payload.transaction_date,
         credit_card_id=payload.credit_card_id,
+        reward_rule_id=payload.reward_rule_id if payload.credit_card_id else None,
         is_online=payload.is_online,
         is_recurring=payload.is_recurring,
         notes=payload.notes,
@@ -141,11 +159,17 @@ async def create_expense(
         card=card,
         context=_spend_context(expense),
         transaction_date=expense.transaction_date,
+        chosen_rule_id=expense.reward_rule_id,
     )
     _apply_cashback(expense, cashback)
 
     db.add(expense)
     await db.flush()
+
+    # Reflect the spend on the card's outstanding balance / utilization.
+    await _adjust_card_balance(
+        db, current_user.id, expense.credit_card_id, expense.amount
+    )
 
     # 3) Summary.
     await _recompute_summaries(db, current_user.id, expense.transaction_date)
@@ -237,6 +261,8 @@ async def update_expense(
 ) -> ExpenseRead:
     expense = await _get_owned_expense(db, current_user.id, expense_id)
     original_month = expense.transaction_date
+    old_card_id = expense.credit_card_id
+    old_amount = Decimal(str(expense.amount))
 
     data = payload.model_dump(exclude_unset=True)
     category_provided = data.get("category") is not None
@@ -250,6 +276,13 @@ async def update_expense(
         if field == "category":
             continue
         setattr(expense, field, value)
+
+    # Keep card outstanding balances in sync with the (possibly moved) spend:
+    # back out the old card/amount, then apply the new one.
+    await _adjust_card_balance(db, current_user.id, old_card_id, -old_amount)
+    await _adjust_card_balance(
+        db, current_user.id, expense.credit_card_id, Decimal(str(expense.amount))
+    )
 
     # 1) Categorization.
     if category_provided:
@@ -265,6 +298,9 @@ async def update_expense(
         expense.is_ai_categorized = True
 
     # 2) Cashback (re-evaluate, excluding this expense from its own cap usage).
+    # A reward-rule choice only makes sense while a card is attached.
+    if expense.credit_card_id is None:
+        expense.reward_rule_id = None
     card = await _get_owned_card(db, current_user.id, expense.credit_card_id)
     cashback = await get_cashback_engine().evaluate(
         db,
@@ -273,6 +309,7 @@ async def update_expense(
         context=_spend_context(expense),
         transaction_date=expense.transaction_date,
         exclude_expense_id=expense.id,
+        chosen_rule_id=expense.reward_rule_id,
     )
     _apply_cashback(expense, cashback)
 
@@ -298,7 +335,11 @@ async def delete_expense(
 ) -> Response:
     expense = await _get_owned_expense(db, current_user.id, expense_id)
     month = expense.transaction_date
+    card_id = expense.credit_card_id
+    amount = Decimal(str(expense.amount))
     await db.delete(expense)
     await db.flush()
+    # Remove the spend from the card's outstanding balance.
+    await _adjust_card_balance(db, current_user.id, card_id, -amount)
     await _recompute_summaries(db, current_user.id, month)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

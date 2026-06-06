@@ -29,6 +29,10 @@ class Expense(Base, TimestampMixin):
     credit_card_id: Mapped[int | None] = mapped_column(
         ForeignKey("credit_cards.id", ondelete="SET NULL"), index=True
     )
+    # User's explicit reward-rule choice for this spend (null => auto-match).
+    reward_rule_id: Mapped[int | None] = mapped_column(
+        ForeignKey("reward_rules.id", ondelete="SET NULL"), index=True
+    )
 
     amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
     category: Mapped[ExpenseCategory] = mapped_column(

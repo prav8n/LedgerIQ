@@ -24,12 +24,14 @@ router = APIRouter(prefix="/net-worth", tags=["Net Worth"])
 async def current_net_worth(
     current_user: CurrentUser, db: SessionDep
 ) -> NetWorthRead:
-    # Carry forward manual buckets from the latest snapshot, if any.
+    # Cash is derived live from tracked income/expenses, so it is NOT carried
+    # forward (the stored snapshot cash already includes that flow). Other manual
+    # buckets (property, other assets/liabilities) are carried forward.
     latest = await networth_service.latest_snapshot(db, current_user.id)
     comp = await networth_service.compute(
         db,
         user_id=current_user.id,
-        cash=latest.cash if latest else 0,
+        cash=0,
         property_value=latest.property_value if latest else 0,
         other_assets=latest.other_assets if latest else 0,
         other_liabilities=latest.other_liabilities if latest else 0,

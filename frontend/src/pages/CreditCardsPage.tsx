@@ -34,7 +34,7 @@ import {
 import { useToast } from '@/hooks/useToast';
 import { getErrorMessage } from '@/services/api';
 import { cardNetworks, rewardAppliesTo, rewardTypes } from '@/constants/enums';
-import { formatDate, formatINR, formatPercent, toNumber } from '@/utils/format';
+import { formatDate, formatINR, formatPercent, humanize, toNumber } from '@/utils/format';
 import type {
   CreditCard as Card_,
   CreditCardInput,
@@ -172,6 +172,24 @@ function utilizationColor(pct: number): 'success' | 'warning' | 'error' {
   return 'success';
 }
 
+function ruleRateLabel(r: RewardRule): string {
+  const rate = toNumber(r.reward_rate);
+  switch (r.reward_type) {
+    case 'cashback':
+      return `${rate}%`;
+    case 'reward_points':
+      return `${rate} pts/₹`;
+    case 'air_miles':
+      return `${rate} mi/₹`;
+    case 'milestone_bonus':
+      return r.milestone_threshold
+        ? `${formatINR(r.milestone_reward ?? '0')} @ ${formatINR(r.milestone_threshold)}`
+        : '';
+    default:
+      return '';
+  }
+}
+
 function earningText(e: RuleEarning): string {
   if (e.reward_type === 'cashback') return formatINR(e.reward_value_inr);
   const unit = e.reward_type === 'air_miles' ? 'miles' : 'pts';
@@ -226,6 +244,13 @@ function RuleFields({
               label={isCashback ? 'Rate (% cashback)' : 'Rate (units per ₹)'}
               type="number"
               required
+              info={
+                isCashback
+                  ? 'Percent of eligible spend returned as cashback.\n\n' +
+                    'Example: 5 means 5% — a ₹2,000 online purchase earns ₹100.'
+                  : 'Reward units (points or miles) earned per ₹1 spent.\n\n' +
+                    'Example: enter 2 for 2 points per ₹1, or 0.0667 for ~1 point per ₹15.'
+              }
             />
             {isPoints && (
               <RHFTextField
@@ -234,6 +259,10 @@ function RuleFields({
                 label="₹ value per point / mile"
                 type="number"
                 helperText="Used to show the ₹ equivalent"
+                info={
+                  '₹ value of one point / mile — used to convert rewards into a ₹ figure.\n\n' +
+                  'Example: 0.25 means 100 points = ₹25.'
+                }
               />
             )}
             <RHFSelect
@@ -379,31 +408,29 @@ function CardItem({
           />
         </Box>
 
-        {/* Statement / due */}
-        {(card.next_statement_date || card.next_due_date) && (
-          <Stack direction="row" spacing={3} mb={1.5}>
-            <Box>
-              <Typography variant="caption" color="text.secondary">
-                Statement
-              </Typography>
-              <Typography variant="body2">{formatDate(card.next_statement_date)}</Typography>
-            </Box>
-            <Box>
-              <Typography variant="caption" color="text.secondary">
-                Due
-              </Typography>
-              <Typography variant="body2">{formatDate(card.next_due_date)}</Typography>
-            </Box>
-            <Box>
-              <Typography variant="caption" color="text.secondary">
-                Amount due
-              </Typography>
-              <Typography variant="body2" fontWeight={700}>
-                {formatINR(card.current_balance)}
-              </Typography>
-            </Box>
-          </Stack>
-        )}
+        {/* Statement / due — always shown so the amount due is visible. */}
+        <Stack direction="row" spacing={3} mb={1.5}>
+          <Box>
+            <Typography variant="caption" color="text.secondary">
+              Statement
+            </Typography>
+            <Typography variant="body2">{formatDate(card.next_statement_date)}</Typography>
+          </Box>
+          <Box>
+            <Typography variant="caption" color="text.secondary">
+              Due
+            </Typography>
+            <Typography variant="body2">{formatDate(card.next_due_date)}</Typography>
+          </Box>
+          <Box>
+            <Typography variant="caption" color="text.secondary">
+              Amount due
+            </Typography>
+            <Typography variant="body2" fontWeight={700}>
+              {formatINR(card.current_balance)}
+            </Typography>
+          </Box>
+        </Stack>
 
         <Divider sx={{ my: 1.5 }} />
 
@@ -419,18 +446,42 @@ function CardItem({
             No rewards earned yet this month.
           </Typography>
         ) : (
-          <Stack spacing={0.5} mb={1}>
-            {s.earnings.map((e) => (
-              <Stack key={e.rule_id} direction="row" justifyContent="space-between">
-                <Typography variant="caption" color="text.secondary" noWrap>
-                  {e.rule_name}
-                  {e.capped ? ' (capped)' : ''}
-                </Typography>
-                <Typography variant="caption" fontWeight={700}>
-                  {earningText(e)}
-                </Typography>
-              </Stack>
-            ))}
+          <Stack spacing={1} mb={1}>
+            {s.earnings.map((e) => {
+              const cap = e.monthly_cap;
+              const isCash = e.reward_type === 'cashback';
+              const capPct = cap
+                ? Math.min((toNumber(e.reward_units) / Math.max(toNumber(cap), 1)) * 100, 100)
+                : null;
+              const capText = (v: string) =>
+                isCash ? formatINR(v) : toNumber(v).toLocaleString('en-IN');
+              return (
+                <Box key={e.rule_id}>
+                  <Stack direction="row" justifyContent="space-between">
+                    <Typography variant="caption" color="text.secondary" noWrap>
+                      {e.rule_name}
+                      {e.capped ? ' (cap reached)' : ''}
+                    </Typography>
+                    <Typography variant="caption" fontWeight={700}>
+                      {earningText(e)}
+                    </Typography>
+                  </Stack>
+                  {capPct !== null && cap && (
+                    <>
+                      <LinearProgress
+                        variant="determinate"
+                        value={capPct}
+                        color={e.capped ? 'error' : 'secondary'}
+                        sx={{ height: 5, borderRadius: 4, mt: 0.25 }}
+                      />
+                      <Typography variant="caption" color="text.secondary">
+                        {capText(e.reward_units)} of {capText(cap)} monthly cap
+                      </Typography>
+                    </>
+                  )}
+                </Box>
+              );
+            })}
           </Stack>
         )}
 
@@ -482,6 +533,36 @@ function CardItem({
               <Chip key={b} label={b} size="small" variant="outlined" />
             ))}
           </Stack>
+        )}
+
+        {/* All reward rules on this card (definitions, not just what earned) */}
+        {card.reward_rules.length > 0 && (
+          <Box mt={1.5}>
+            <Typography variant="caption" color="text.secondary">
+              Reward rules
+            </Typography>
+            <Stack spacing={0.5} mt={0.5}>
+              {card.reward_rules.map((r) => (
+                <Stack
+                  key={r.id}
+                  direction="row"
+                  justifyContent="space-between"
+                  alignItems="center"
+                  spacing={1}
+                >
+                  <Stack direction="row" spacing={0.75} alignItems="center" minWidth={0}>
+                    <Chip label={humanize(r.reward_type)} size="small" variant="outlined" />
+                    <Typography variant="caption" noWrap>
+                      {r.rule_name}
+                    </Typography>
+                  </Stack>
+                  <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0 }}>
+                    {ruleRateLabel(r)}
+                  </Typography>
+                </Stack>
+              ))}
+            </Stack>
+          </Box>
         )}
       </CardContent>
     </Card>
@@ -657,6 +738,10 @@ export function CreditCardsPage() {
               type="number"
               min="1"
               max="31"
+              info={
+                'Day of the month your statement is generated (1–31).\n\n' +
+                'Example: 5 → your monthly bill is finalized on the 5th.'
+              }
             />
             <RHFTextField
               control={control}
@@ -665,6 +750,10 @@ export function CreditCardsPage() {
               type="number"
               min="1"
               max="31"
+              info={
+                'Day of the month the bill must be paid (1–31).\n\n' +
+                'Example: 24 → pay by the 24th to avoid interest and late fees.'
+              }
             />
             <RHFTextField
               control={control}
@@ -673,6 +762,11 @@ export function CreditCardsPage() {
               type="number"
               min="1"
               max="31"
+              info={
+                'Day a new billing cycle begins (1–31).\n\n' +
+                'Example: 1 → purchases from the 1st appear on the next statement. ' +
+                'Optional — leave blank if unsure.'
+              }
             />
           </Stack>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>

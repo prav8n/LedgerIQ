@@ -3,7 +3,9 @@
 export interface DashboardKpis {
   income: string;
   expenses: string;
+  effective_expense: string;
   cashback: string;
+  cc_spend: string;
   savings: string;
   savings_rate: number;
   investments: string;
@@ -48,6 +50,7 @@ export interface CreditCardWidget {
   issuer: string;
   network: string;
   last_four: string | null;
+  card_color: string | null;
   credit_limit: string;
   current_balance: string;
   available_credit: string;

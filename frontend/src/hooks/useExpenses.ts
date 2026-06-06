@@ -12,6 +12,9 @@ export function useExpenses(filters: ExpenseFilters) {
 function invalidate(qc: ReturnType<typeof useQueryClient>) {
   void qc.invalidateQueries({ queryKey: ['expenses'] });
   void qc.invalidateQueries({ queryKey: ['dashboard'] });
+  void qc.invalidateQueries({ queryKey: ['analytics'] });
+  // A card-paid expense changes the card's outstanding/utilization and rewards.
+  void qc.invalidateQueries({ queryKey: ['credit-cards'] });
 }
 
 export function useCreateExpense() {

@@ -44,6 +44,8 @@ export function FixedVsVariableBar({ data }: Props) {
             border: `1px solid ${colors.tooltipBorder}`,
             borderRadius: 8,
           }}
+          itemStyle={{ color: colors.text }}
+          labelStyle={{ color: colors.text }}
         />
         <Bar dataKey="amount" radius={[8, 8, 0, 0]} maxBarSize={90}>
           {chartData.map((_, i) => (
