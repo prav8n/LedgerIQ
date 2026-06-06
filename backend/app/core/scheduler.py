@@ -16,7 +16,7 @@ from sqlalchemy import select
 from app.core.config import settings
 from app.db.session import AsyncSessionLocal
 from app.models.user import User
-from app.services import notification_service
+from app.services import notification_service, subscription_billing
 from app.services.insights_service import get_insight_generator
 from app.services.llm import get_llm_client
 
@@ -36,6 +36,21 @@ async def run_notification_scan() -> int:
         except Exception:
             await session.rollback()
             logger.exception("Notification scan failed")
+            raise
+
+
+async def run_subscription_billing() -> int:
+    """Job entrypoint: auto-post expenses for subscriptions due today."""
+    async with AsyncSessionLocal() as session:
+        try:
+            posted = await subscription_billing.post_due_subscriptions(session)
+            await session.commit()
+            if posted:
+                logger.info("Auto-posted %s subscription charge(s)", posted)
+            return posted
+        except Exception:
+            await session.rollback()
+            logger.exception("Subscription billing failed")
             raise
 
 
@@ -72,6 +87,15 @@ def start_scheduler() -> None:
         "Scheduler started — daily notification scan at %02d:00 %s",
         settings.NOTIFICATION_SCAN_HOUR,
         settings.DEFAULT_TIMEZONE,
+    )
+
+    # Auto-post due subscriptions as expenses, early each day.
+    scheduler.add_job(
+        run_subscription_billing,
+        trigger=CronTrigger(hour=1, minute=0),
+        id="daily_subscription_billing",
+        replace_existing=True,
+        misfire_grace_time=3600,
     )
 
     # Weekly LLM insight refresh — only when an LLM key is configured.

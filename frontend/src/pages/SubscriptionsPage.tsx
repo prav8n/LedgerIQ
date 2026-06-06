@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import {
   Box,
   Button,
@@ -25,7 +25,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { LoadingSkeleton } from '@/components/LoadingSkeleton';
 import { EmptyState } from '@/components/EmptyState';
 import { KpiCard } from '@/components/dashboard/KpiCard';
-import { subscriptionHooks, useSubscriptionSummary } from '@/hooks/financeHooks';
+import { creditCardHooks, subscriptionHooks, useSubscriptionSummary } from '@/hooks/financeHooks';
 import { useToast } from '@/hooks/useToast';
 import { getErrorMessage } from '@/services/api';
 import { frequencies, paymentMethods, subscriptionCategories } from '@/constants/enums';
@@ -40,13 +40,16 @@ interface FormValues {
   start_date: string;
   next_billing_date: string;
   payment_method: string;
+  credit_card_id: string;
+  reward_rule_id: string;
   reminder_days: string;
 }
 
 const today = () => new Date().toISOString().slice(0, 10);
 const empty = (): FormValues => ({
   name: '', category: 'streaming', amount: '', billing_cycle: 'monthly',
-  start_date: today(), next_billing_date: today(), payment_method: 'auto_debit', reminder_days: '3',
+  start_date: today(), next_billing_date: today(), payment_method: 'auto_debit',
+  credit_card_id: '', reward_rule_id: '', reminder_days: '3',
 });
 
 export function SubscriptionsPage() {
@@ -63,6 +66,19 @@ export function SubscriptionsPage() {
 
   const { control, handleSubmit, reset } = useForm<FormValues>({ defaultValues: empty() });
 
+  // Cards + their per-transaction rules, so a card-billed subscription can earn
+  // rewards on auto-posted charges (same selectors as the Expenses form).
+  const { data: cards } = creditCardHooks.useList();
+  const cardOptions = (cards ?? []).map((c) => ({ value: String(c.id), label: c.card_name }));
+  const paymentMethod = useWatch({ control, name: 'payment_method' });
+  const creditCardId = useWatch({ control, name: 'credit_card_id' });
+  const TXN_REWARD = new Set(['cashback', 'reward_points', 'air_miles']);
+  const selectedCard = (cards ?? []).find((c) => String(c.id) === creditCardId);
+  const ruleOptions = (selectedCard?.reward_rules ?? [])
+    .filter((r) => TXN_REWARD.has(r.reward_type))
+    .map((r) => ({ value: String(r.id), label: r.rule_name }));
+  const validRuleIds = new Set(ruleOptions.map((o) => o.value));
+
   useEffect(() => {
     if (!open) return;
     reset(
@@ -71,6 +87,8 @@ export function SubscriptionsPage() {
             name: editing.name, category: editing.category, amount: editing.amount,
             billing_cycle: editing.billing_cycle, start_date: editing.start_date,
             next_billing_date: editing.next_billing_date, payment_method: editing.payment_method,
+            credit_card_id: editing.credit_card_id != null ? String(editing.credit_card_id) : '',
+            reward_rule_id: editing.reward_rule_id != null ? String(editing.reward_rule_id) : '',
             reminder_days: String(editing.reminder_days),
           }
         : empty(),
@@ -78,10 +96,16 @@ export function SubscriptionsPage() {
   }, [open, editing, reset]);
 
   const onSubmit = handleSubmit(async (v) => {
+    const onCard = v.payment_method === 'credit_card';
     const body: SubscriptionInput = {
       name: v.name, category: v.category, amount: Number(v.amount), billing_cycle: v.billing_cycle,
       start_date: v.start_date, next_billing_date: v.next_billing_date,
       payment_method: v.payment_method, reminder_days: Number(v.reminder_days),
+      credit_card_id: onCard && v.credit_card_id ? Number(v.credit_card_id) : null,
+      reward_rule_id:
+        onCard && v.reward_rule_id && validRuleIds.has(v.reward_rule_id)
+          ? Number(v.reward_rule_id)
+          : null,
     };
     try {
       if (editing) await updateM.mutateAsync({ id: editing.id, body });
@@ -179,6 +203,24 @@ export function SubscriptionsPage() {
           <RHFTextField control={control} name="start_date" label="Start date" type="date" required />
           <RHFTextField control={control} name="next_billing_date" label="Next renewal" type="date" required />
           <RHFSelect control={control} name="payment_method" label="Payment method" options={paymentMethods} />
+          {paymentMethod === 'credit_card' && (
+            <RHFSelect
+              control={control}
+              name="credit_card_id"
+              label="Credit card"
+              options={cardOptions}
+              emptyLabel={cardOptions.length ? 'No card' : 'Add a card first'}
+            />
+          )}
+          {paymentMethod === 'credit_card' && ruleOptions.length > 0 && (
+            <RHFSelect
+              control={control}
+              name="reward_rule_id"
+              label="Reward rule"
+              options={ruleOptions}
+              emptyLabel="Auto (best match)"
+            />
+          )}
           <RHFTextField control={control} name="reminder_days" label="Reminder (days before)" type="number" step="1" max="60" />
         </Stack>
       </FormDialog>

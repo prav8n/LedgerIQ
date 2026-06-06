@@ -46,6 +46,13 @@ class Subscription(Base, TimestampMixin):
         default=PaymentMethod.AUTO_DEBIT,
         nullable=False,
     )
+    # Card the subscription is billed to (for auto-posted, reward-earning charges).
+    credit_card_id: Mapped[int | None] = mapped_column(
+        ForeignKey("credit_cards.id", ondelete="SET NULL"), index=True
+    )
+    reward_rule_id: Mapped[int | None] = mapped_column(
+        ForeignKey("reward_rules.id", ondelete="SET NULL"), index=True
+    )
     reminder_days: Mapped[int] = mapped_column(Integer, default=3, nullable=False)
     auto_renew: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
