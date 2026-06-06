@@ -28,6 +28,10 @@ services:
       ENABLE_SCHEDULER: "true"
       # Browser hits the API same-origin via nginx, but set this for safety.
       CORS_ORIGINS: ${PUBLIC_ORIGIN:-http://localhost}
+      # Optional LLM-backed AI (key stays server-side; empty => rule-based).
+      LLM_PROVIDER: ${LLM_PROVIDER:-anthropic}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-claude-haiku-4-5-20251001}
     depends_on:
       postgres:
         condition: service_healthy

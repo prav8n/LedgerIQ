@@ -10,12 +10,15 @@ Insight ``type`` drives the UI accent: positive | warning | tip | info.
 from __future__ import annotations
 
 import abc
-from datetime import date
+import json
+import logging
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.models.budget import Budget
 from app.models.credit_card import CreditCard
 from app.models.enums import RewardAppliesTo
@@ -23,11 +26,15 @@ from app.models.expense import Expense
 from app.models.income import Income
 from app.models.subscription import Subscription
 from app.services import budget_service, subscription_service
+from app.services.llm import LLMClient, get_llm_client
 from app.services.rewards_engine import RewardRuleEval, SpendContext, get_rewards_engine
 from app.utils.dates import period_bounds, previous_period_ref
 from app.utils.finance import money, percent
 
+logger = logging.getLogger("ledgeriq.ai")
+
 _PERIOD_WORD = {"weekly": "week", "monthly": "month", "yearly": "year"}
+_ALLOWED_TYPES = {"positive", "warning", "tip", "info"}
 
 
 def _rule_hint(rule: RewardRuleEval) -> str:
@@ -265,7 +272,171 @@ class RuleBasedInsightGenerator(InsightGenerator):
         }]
 
 
-_generator: InsightGenerator = RuleBasedInsightGenerator()
+def _parse_insights(text: str) -> list[dict]:
+    """Extract a JSON array of insight objects from the model's reply."""
+    start, end = text.find("["), text.rfind("]")
+    if start == -1 or end == -1:
+        return []
+    try:
+        items = json.loads(text[start : end + 1])
+    except (ValueError, TypeError):
+        return []
+    out: list[dict] = []
+    for i, it in enumerate(items):
+        if not isinstance(it, dict):
+            continue
+        title = str(it.get("title", "")).strip()
+        desc = str(it.get("description", "")).strip()
+        if not title or not desc:
+            continue
+        itype = str(it.get("type", "info")).strip().lower()
+        if itype not in _ALLOWED_TYPES:
+            itype = "info"
+        metric = str(it.get("metric", "")).strip()
+        out.append(
+            {
+                "id": f"llm_{i}",
+                "type": itype,
+                "category": (str(it.get("category", "")).strip() or "ai"),
+                "title": title[:120],
+                "description": desc[:400],
+                "metric": metric[:24] or None,
+            }
+        )
+    return out[:5]
+
+
+class LLMInsightGenerator(InsightGenerator):
+    """LLM-backed insights, generated on a schedule and cached.
+
+    ``generate`` (the request path) never calls the LLM: it serves the cached
+    set when fresh, otherwise the rule-based fallback. ``refresh`` (the
+    scheduler) feeds the same SQL aggregates into the LLM and caches the result.
+    """
+
+    def __init__(
+        self,
+        *,
+        fallback: RuleBasedInsightGenerator,
+        client: LLMClient,
+        ttl_days: int = 8,
+    ) -> None:
+        self._fallback = fallback
+        self._client = client
+        self._ttl = timedelta(days=ttl_days)
+        self._cache: dict[tuple[int, str], tuple[datetime, list[dict]]] = {}
+
+    async def generate(
+        self, db: AsyncSession, user_id: int, *, period: str, reference: date
+    ) -> list[dict]:
+        entry = self._cache.get((user_id, period))
+        if entry and (datetime.now(timezone.utc) - entry[0]) < self._ttl:
+            return entry[1]
+        # No fresh cache: serve rule-based until the scheduled refresh runs.
+        return await self._fallback.generate(db, user_id, period=period, reference=reference)
+
+    async def refresh(
+        self, db: AsyncSession, user_id: int, *, period: str, reference: date
+    ) -> list[dict]:
+        try:
+            context = await self._collect_context(db, user_id, period, reference)
+            insights = await self._call_llm(context)
+            if insights:
+                self._cache[(user_id, period)] = (datetime.now(timezone.utc), insights)
+                return insights
+        except Exception:  # keep the rule-based fallback when the LLM fails
+            logger.exception("LLM insight refresh failed for user %s", user_id)
+        return await self._fallback.generate(db, user_id, period=period, reference=reference)
+
+    async def _collect_context(
+        self, db: AsyncSession, uid: int, period: str, reference: date
+    ) -> dict:
+        word = _PERIOD_WORD.get(period, "month")
+        start, end = period_bounds(period, reference)
+        prev_ref = previous_period_ref(period, reference)
+        p_start, p_end = period_bounds(period, prev_ref)
+
+        income = await _sum(
+            db, Income.amount, Income.user_id == uid,
+            Income.received_date >= start, Income.received_date <= end,
+        )
+        expense = await _sum(
+            db, Expense.amount, Expense.user_id == uid,
+            Expense.transaction_date >= start, Expense.transaction_date <= end,
+        )
+        savings = money(income - expense)
+        current = await _category_totals(db, uid, start, end)
+        previous = await _category_totals(db, uid, p_start, p_end)
+        top = []
+        for cat, amt in sorted(current.items(), key=lambda kv: kv[1], reverse=True)[:6]:
+            prev = previous.get(cat, Decimal("0"))
+            change = round(percent(money(amt - prev), prev), 1) if prev > 0 else None
+            top.append({"category": cat, "amount": float(amt), "change_pct": change})
+
+        budgets = (
+            await db.execute(
+                select(Budget).where(Budget.user_id == uid, Budget.is_active.is_(True))
+            )
+        ).scalars().all()
+        budget_ctx = []
+        for b in budgets:
+            spent = await budget_service.compute_spent(db, b)
+            _, pct, status = budget_service.metrics(b.amount, spent)
+            budget_ctx.append(
+                {"category": b.category.value, "percent_used": round(pct, 1), "status": status}
+            )
+
+        subs = (
+            await db.execute(
+                select(Subscription).where(
+                    Subscription.user_id == uid, Subscription.is_active.is_(True)
+                )
+            )
+        ).scalars().all()
+        sub_monthly = money(
+            sum((subscription_service.monthly_cost(s) for s in subs), Decimal("0"))
+        )
+
+        return {
+            "period": word,
+            "currency": "INR",
+            "income": float(income),
+            "expense": float(expense),
+            "savings": float(savings),
+            "savings_rate_pct": percent(savings, income),
+            "top_categories": top,
+            "budgets": budget_ctx,
+            "subscriptions": {"count": len(subs), "monthly_total": float(sub_monthly)},
+        }
+
+    async def _call_llm(self, context: dict) -> list[dict]:
+        system = (
+            "You are a personal-finance assistant for an Indian user (currency ₹ INR). "
+            "Given the user's aggregated numbers for the period, write 3-5 concise, "
+            "specific, actionable insights. Use ₹ with Indian formatting in the text. "
+            "Base every figure ONLY on the provided data; never invent numbers. "
+            'Respond ONLY with a JSON array; each item: {"type": '
+            '"positive|warning|tip|info", "category": "<short>", "title": "<short>", '
+            '"description": "<1-2 sentences>", "metric": "<short metric or empty>"}.'
+        )
+        text = await self._client.complete(
+            system=system, user=json.dumps(context), max_tokens=900, temperature=0.4
+        )
+        return _parse_insights(text)
+
+
+def _build_insight_generator() -> InsightGenerator:
+    fallback = RuleBasedInsightGenerator()
+    client = get_llm_client()
+    if client is None:
+        return fallback
+    logger.info("LLM insights enabled (scheduled refresh)")
+    return LLMInsightGenerator(
+        fallback=fallback, client=client, ttl_days=settings.LLM_INSIGHTS_TTL_DAYS
+    )
+
+
+_generator: InsightGenerator = _build_insight_generator()
 
 
 def get_insight_generator() -> InsightGenerator:

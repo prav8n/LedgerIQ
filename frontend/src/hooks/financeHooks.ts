@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createCrudHooks } from '@/hooks/createCrudHooks';
 import {
   budgetService,
+  creditCardService,
   emiService,
   goalService,
   incomeService,
@@ -12,6 +13,8 @@ import {
 import type {
   Budget,
   BudgetInput,
+  CreditCard,
+  CreditCardInput,
   EMI,
   EMIInput,
   Goal,
@@ -53,6 +56,49 @@ export const subscriptionHooks = createCrudHooks<
   Partial<SubscriptionInput>
 >('subscriptions', subscriptionService);
 export const emiHooks = createCrudHooks<EMI, EMIInput, Partial<EMIInput>>('emis', emiService);
+
+// ---- Credit cards ----
+// Cards (and their reward rules) drive dashboard widgets and analytics, so
+// mutations refresh those derived views too.
+export const creditCardHooks = createCrudHooks<
+  CreditCard,
+  CreditCardInput,
+  Partial<CreditCardInput>
+>('credit-cards', creditCardService);
+
+function useInvalidateCards() {
+  const qc = useQueryClient();
+  return () => {
+    void qc.invalidateQueries({ queryKey: ['credit-cards'] });
+    void qc.invalidateQueries({ queryKey: ['dashboard'] });
+    void qc.invalidateQueries({ queryKey: ['analytics'] });
+  };
+}
+
+export function useCreateCard() {
+  const invalidate = useInvalidateCards();
+  return useMutation({
+    mutationFn: (body: CreditCardInput) => creditCardService.create(body),
+    onSuccess: invalidate,
+  });
+}
+
+export function useUpdateCard() {
+  const invalidate = useInvalidateCards();
+  return useMutation({
+    mutationFn: (vars: { id: number; body: Partial<CreditCardInput> }) =>
+      creditCardService.update(vars.id, vars.body),
+    onSuccess: invalidate,
+  });
+}
+
+export function useRemoveCard() {
+  const invalidate = useInvalidateCards();
+  return useMutation({
+    mutationFn: (id: number) => creditCardService.remove(id),
+    onSuccess: invalidate,
+  });
+}
 
 // ---- Income mutations ----
 // Income feeds the Dashboard "Income" KPI and the Savings = Income − Expenses
