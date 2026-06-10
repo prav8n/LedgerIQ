@@ -52,14 +52,23 @@ async def kpis(db: AsyncSession, user_id: int, *, reference: date) -> dict:
     income = await _income_between(db, user_id, start, end)
     expenses = await _expense_between(db, user_id, start, end)
     cashback = await _cashback_between(db, user_id, start, end)
-    savings = money(income - expenses)
+    cc_spend = await _sum(
+        db, Expense.amount, Expense.user_id == user_id,
+        Expense.credit_card_id.isnot(None),
+        Expense.transaction_date >= start, Expense.transaction_date <= end,
+    )
+    # Cashback offsets spend: effective spend is net of it, and savings counts it.
+    effective_expense = money(expenses - cashback)
+    savings = money(income - effective_expense)
     investments = await _sum(db, Investment.current_value, Investment.user_id == user_id)
     nw = await networth_service.compute(db, user_id=user_id)
 
     return {
         "income": income,
         "expenses": expenses,
+        "effective_expense": effective_expense,
         "cashback": cashback,
+        "cc_spend": cc_spend,
         "savings": savings,
         "savings_rate": percent(savings, income),
         "investments": investments,
@@ -104,7 +113,7 @@ async def trends(db, user_id, *, reference: date, months: int) -> dict:
         inc = await _income_between(db, user_id, start, end)
         exp = await _expense_between(db, user_id, start, end)
         cb = await _cashback_between(db, user_id, start, end)
-        sav = money(inc - exp)
+        sav = money(inc - exp + cb)  # cashback counts toward savings
         # Cumulative capital deployed up to end-of-month.
         invested = await _sum(
             db, Investment.invested_amount,
@@ -148,6 +157,7 @@ async def credit_card_widgets(db, user_id, *, reference: date) -> list[dict]:
             "issuer": card.issuer,
             "network": card.network.value,
             "last_four": card.last_four,
+            "card_color": card.card_color,
             "credit_limit": money(card.credit_limit),
             "current_balance": money(card.current_balance),
             "available_credit": available_credit(card),

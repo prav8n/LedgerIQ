@@ -45,6 +45,8 @@ export function ExpenseCategoryPie({ items }: Props) {
             border: `1px solid ${colors.tooltipBorder}`,
             borderRadius: 8,
           }}
+          itemStyle={{ color: colors.text }}
+          labelStyle={{ color: colors.text }}
         />
         <Legend iconType="circle" />
       </PieChart>

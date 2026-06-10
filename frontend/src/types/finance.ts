@@ -237,6 +237,8 @@ export interface Subscription {
   start_date: string;
   next_billing_date: string;
   payment_method: string;
+  credit_card_id: number | null;
+  reward_rule_id: number | null;
   reminder_days: number;
   auto_renew: boolean;
   is_active: boolean;
@@ -251,6 +253,8 @@ export interface SubscriptionInput {
   start_date: string;
   next_billing_date: string;
   payment_method?: string;
+  credit_card_id?: number | null;
+  reward_rule_id?: number | null;
   reminder_days?: number;
   auto_renew?: boolean;
   is_active?: boolean;

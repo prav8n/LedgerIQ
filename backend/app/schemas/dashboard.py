@@ -10,7 +10,9 @@ from pydantic import BaseModel
 class DashboardKpis(BaseModel):
     income: Decimal
     expenses: Decimal
+    effective_expense: Decimal
     cashback: Decimal
+    cc_spend: Decimal
     savings: Decimal
     savings_rate: float
     investments: Decimal
@@ -55,6 +57,7 @@ class CreditCardWidget(BaseModel):
     issuer: str
     network: str
     last_four: str | None
+    card_color: str | None
     credit_limit: Decimal
     current_balance: Decimal
     available_credit: Decimal

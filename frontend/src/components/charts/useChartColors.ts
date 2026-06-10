@@ -4,6 +4,7 @@ export interface ChartColors {
   categorical: string[];
   axis: string;
   grid: string;
+  text: string;
   tooltipBg: string;
   tooltipBorder: string;
   primary: string;
@@ -33,6 +34,7 @@ export function useChartColors(): ChartColors {
     ],
     axis: p.text.secondary,
     grid: p.divider,
+    text: p.text.primary,
     tooltipBg: p.background.paper,
     tooltipBorder: p.divider,
     primary: p.primary.main,

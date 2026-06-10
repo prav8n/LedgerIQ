@@ -23,7 +23,9 @@ export function CreditCardWidgetCard({ card }: Props) {
     : 0;
 
   return (
-    <Card sx={{ height: '100%' }}>
+    <Card
+      sx={{ height: '100%', borderTop: 4, borderTopColor: card.card_color || 'primary.main' }}
+    >
       <CardContent>
         <Stack direction="row" justifyContent="space-between" alignItems="flex-start" mb={2}>
           <Box>

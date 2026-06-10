@@ -21,6 +21,8 @@ class ExpenseCreate(BaseModel):
     payment_method: PaymentMethod = PaymentMethod.UPI
     transaction_date: date
     credit_card_id: int | None = None
+    # Optional: force a specific card reward rule (null => auto-match).
+    reward_rule_id: int | None = None
     is_online: bool = False
     is_recurring: bool = False
     notes: str | None = None
@@ -37,6 +39,7 @@ class ExpenseUpdate(BaseModel):
     payment_method: PaymentMethod | None = None
     transaction_date: date | None = None
     credit_card_id: int | None = None
+    reward_rule_id: int | None = None
     is_online: bool | None = None
     is_recurring: bool | None = None
     notes: str | None = None
@@ -55,6 +58,7 @@ class ExpenseRead(BaseModel):
     payment_method: PaymentMethod
     transaction_date: date
     credit_card_id: int | None
+    reward_rule_id: int | None
     is_online: bool
     is_recurring: bool
     is_ai_categorized: bool

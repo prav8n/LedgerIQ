@@ -1,0 +1,19 @@
+# Cloudflare Tunnel overlay — publishes the stack at your domain over HTTPS with
+# NO open inbound ports (the tunnel connects outbound to Cloudflare).
+#
+# Use it alongside the base compose file:
+#   docker compose -f docker-compose.yml -f docker-compose.tunnel.yml up -d --build
+#
+# In the Cloudflare Zero Trust dashboard (Networks -> Tunnels), create a tunnel,
+# copy its token into TUNNEL_TOKEN in .env, and add a Public Hostname:
+#   Subdomain: app   Domain: yourdomain.com   Service: HTTP -> nginx:80
+services:
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?Set TUNNEL_TOKEN in .env (copy it from the Cloudflare tunnel)}
+    depends_on:
+      - nginx
+    networks: [appnet]
+    restart: unless-stopped

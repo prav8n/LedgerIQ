@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { Box, Stack, Typography } from '@mui/material';
 import PaymentsRoundedIcon from '@mui/icons-material/PaymentsRounded';
 import ReceiptLongRoundedIcon from '@mui/icons-material/ReceiptLongRounded';
-import RedeemRoundedIcon from '@mui/icons-material/RedeemRounded';
+import PriceCheckRoundedIcon from '@mui/icons-material/PriceCheckRounded';
+import CreditCardRoundedIcon from '@mui/icons-material/CreditCardRounded';
 import SavingsRoundedIcon from '@mui/icons-material/SavingsRounded';
-import PercentRoundedIcon from '@mui/icons-material/PercentRounded';
 import TrendingUpRoundedIcon from '@mui/icons-material/TrendingUpRounded';
 import AccountBalanceRoundedIcon from '@mui/icons-material/AccountBalanceRounded';
 
@@ -96,7 +96,20 @@ export function DashboardPage() {
       >
         <KpiCard title="Income" value={formatINR(k.income)} icon={<PaymentsRoundedIcon />} accent="success.main" />
         <KpiCard title="Expenses" value={formatINR(k.expenses)} icon={<ReceiptLongRoundedIcon />} accent="error.main" />
-        <KpiCard title="Cashback" value={formatINR(k.cashback)} icon={<RedeemRoundedIcon />} accent="secondary.main" />
+        <KpiCard
+          title="Effective Spend"
+          value={formatINR(k.effective_expense)}
+          icon={<PriceCheckRoundedIcon />}
+          accent="warning.main"
+          caption={`After ${formatINR(k.cashback)} cashback`}
+        />
+        <KpiCard
+          title="Card Spend"
+          value={formatINR(k.cc_spend)}
+          icon={<CreditCardRoundedIcon />}
+          accent="secondary.main"
+          caption={`${formatINR(k.cashback)} cashback earned`}
+        />
         <KpiCard
           title="Savings"
           value={formatINR(k.savings)}
@@ -104,7 +117,6 @@ export function DashboardPage() {
           accent="primary.main"
           caption={`Rate ${formatPercent(k.savings_rate)}`}
         />
-        <KpiCard title="Savings Rate" value={formatPercent(k.savings_rate)} icon={<PercentRoundedIcon />} accent="info.main" />
         <KpiCard title="Investments" value={formatINR(k.investments)} icon={<TrendingUpRoundedIcon />} accent="secondary.main" />
         <KpiCard title="Net Worth" value={formatINR(k.net_worth)} icon={<AccountBalanceRoundedIcon />} accent="primary.main" />
       </Box>

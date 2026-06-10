@@ -127,6 +127,11 @@ async def update_card(
         await db.flush()
         for rule in rules:
             db.add(RewardRule(card_id=card.id, **rule))
+        await db.flush()
+        # Keep stored expense rewards consistent with the new rules.
+        await rewards_service.recompute_card_expenses(
+            db, user_id=current_user.id, card=card
+        )
     await db.flush()
     await db.refresh(card)
     return await _to_read(db, current_user.id, card)
@@ -155,10 +160,11 @@ async def add_rule(
     current_user: CurrentUser,
     db: SessionDep,
 ) -> RewardRuleRead:
-    await _get_owned(db, current_user.id, card_id)
+    card = await _get_owned(db, current_user.id, card_id)
     rule = RewardRule(card_id=card_id, **payload.model_dump())
     db.add(rule)
     await db.flush()
+    await rewards_service.recompute_card_expenses(db, user_id=current_user.id, card=card)
     await db.refresh(rule)
     return RewardRuleRead.model_validate(rule)
 
@@ -171,11 +177,12 @@ async def update_rule(
     current_user: CurrentUser,
     db: SessionDep,
 ) -> RewardRuleRead:
-    await _get_owned(db, current_user.id, card_id)
+    card = await _get_owned(db, current_user.id, card_id)
     rule = await _get_owned_rule(db, card_id, rule_id)
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(rule, field, value)
     await db.flush()
+    await rewards_service.recompute_card_expenses(db, user_id=current_user.id, card=card)
     await db.refresh(rule)
     return RewardRuleRead.model_validate(rule)
 
@@ -191,7 +198,9 @@ async def delete_rule(
     current_user: CurrentUser,
     db: SessionDep,
 ) -> Response:
-    await _get_owned(db, current_user.id, card_id)
+    card = await _get_owned(db, current_user.id, card_id)
     rule = await _get_owned_rule(db, card_id, rule_id)
     await db.delete(rule)
+    await db.flush()
+    await rewards_service.recompute_card_expenses(db, user_id=current_user.id, card=card)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

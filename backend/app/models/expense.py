@@ -29,6 +29,10 @@ class Expense(Base, TimestampMixin):
     credit_card_id: Mapped[int | None] = mapped_column(
         ForeignKey("credit_cards.id", ondelete="SET NULL"), index=True
     )
+    # User's explicit reward-rule choice for this spend (null => auto-match).
+    reward_rule_id: Mapped[int | None] = mapped_column(
+        ForeignKey("reward_rules.id", ondelete="SET NULL"), index=True
+    )
 
     amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
     category: Mapped[ExpenseCategory] = mapped_column(
@@ -70,7 +74,6 @@ class Expense(Base, TimestampMixin):
     # Identifier of the cashback rule that matched, for transparency / audit.
     cashback_rule: Mapped[str | None] = mapped_column(String(60))
 
+    # Relationships
     user: Mapped["User"] = relationship(back_populates="expenses")
-    credit_card: Mapped["CreditCard | None"] = relationship(
-        back_populates="expenses"
-    )
+    credit_card: Mapped["CreditCard | None"] = relationship(back_populates="expenses")

@@ -44,6 +44,8 @@ export function TrendChart({ data, series, variant = 'line', showLegend = true }
         border: `1px solid ${colors.tooltipBorder}`,
         borderRadius: 8,
       }}
+      itemStyle={{ color: colors.text }}
+      labelStyle={{ color: colors.text }}
     />
   );
   const grid = <CartesianGrid strokeDasharray="3 3" stroke={colors.grid} vertical={false} />;

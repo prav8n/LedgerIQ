@@ -18,6 +18,8 @@ class SubscriptionCreate(BaseModel):
     start_date: date
     next_billing_date: date
     payment_method: PaymentMethod = PaymentMethod.AUTO_DEBIT
+    credit_card_id: int | None = None
+    reward_rule_id: int | None = None
     reminder_days: int = Field(default=3, ge=0, le=60)
     auto_renew: bool = True
     is_active: bool = True
@@ -31,6 +33,8 @@ class SubscriptionUpdate(BaseModel):
     start_date: date | None = None
     next_billing_date: date | None = None
     payment_method: PaymentMethod | None = None
+    credit_card_id: int | None = None
+    reward_rule_id: int | None = None
     reminder_days: int | None = Field(default=None, ge=0, le=60)
     auto_renew: bool | None = None
     is_active: bool | None = None
@@ -47,6 +51,8 @@ class SubscriptionRead(BaseModel):
     start_date: date
     next_billing_date: date
     payment_method: PaymentMethod
+    credit_card_id: int | None
+    reward_rule_id: int | None
     reminder_days: int
     auto_renew: bool
     is_active: bool

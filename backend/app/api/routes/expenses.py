@@ -11,6 +11,7 @@ from __future__ import annotations
 import math
 from datetime import date
 from decimal import Decimal
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
 from sqlalchemy import func, or_, select
@@ -60,6 +61,23 @@ async def _get_owned_card(
             detail="Credit card not found for this user",
         )
     return card
+
+
+async def _adjust_card_balance(
+    db: SessionDep, user_id: int, card_id: int | None, delta: Decimal
+) -> None:
+    """Apply a signed change to a card's outstanding balance (floored at 0).
+
+    Adding a card-paid expense raises the outstanding (and utilization);
+    deleting/editing reverses it.
+    """
+    if not card_id or delta == 0:
+        return
+    card = await db.get(CreditCard, card_id)
+    if card is None or card.user_id != user_id:
+        return
+    new_balance = Decimal(str(card.current_balance)) + Decimal(str(delta))
+    card.current_balance = new_balance if new_balance > 0 else Decimal("0")
 
 
 def _spend_context(expense: Expense) -> SpendContext:
@@ -116,6 +134,7 @@ async def create_expense(
         payment_method=payload.payment_method,
         transaction_date=payload.transaction_date,
         credit_card_id=payload.credit_card_id,
+        reward_rule_id=payload.reward_rule_id if payload.credit_card_id else None,
         is_online=payload.is_online,
         is_recurring=payload.is_recurring,
         notes=payload.notes,
@@ -141,11 +160,17 @@ async def create_expense(
         card=card,
         context=_spend_context(expense),
         transaction_date=expense.transaction_date,
+        chosen_rule_id=expense.reward_rule_id,
     )
     _apply_cashback(expense, cashback)
 
     db.add(expense)
     await db.flush()
+
+    # Reflect the spend on the card's outstanding balance / utilization.
+    await _adjust_card_balance(
+        db, current_user.id, expense.credit_card_id, expense.amount
+    )
 
     # 3) Summary.
     await _recompute_summaries(db, current_user.id, expense.transaction_date)
@@ -164,10 +189,13 @@ async def list_expenses(
     category: ExpenseCategory | None = None,
     payment_method: PaymentMethod | None = None,
     credit_card_id: int | None = None,
+    rule_id: int | None = Query(None, description="Filter by the reward rule that earned"),
     date_from: date | None = None,
     date_to: date | None = None,
     min_amount: Decimal | None = Query(None, ge=0),
     max_amount: Decimal | None = Query(None, ge=0),
+    sort: Literal["date", "amount", "category", "merchant", "cashback"] = "date",
+    order: Literal["asc", "desc"] = "desc",
 ) -> PaginatedExpenses:
     filters = [Expense.user_id == current_user.id]
     if category is not None:
@@ -176,6 +204,9 @@ async def list_expenses(
         filters.append(Expense.payment_method == payment_method)
     if credit_card_id is not None:
         filters.append(Expense.credit_card_id == credit_card_id)
+    if rule_id is not None:
+        # cashback_rule stores the id of the rule that actually earned.
+        filters.append(Expense.cashback_rule == str(rule_id))
     if date_from is not None:
         filters.append(Expense.transaction_date >= date_from)
     if date_to is not None:
@@ -199,11 +230,21 @@ async def list_expenses(
     )
     total = int(total or 0)
 
+    sort_columns = {
+        "date": Expense.transaction_date,
+        "amount": Expense.amount,
+        "category": Expense.category,
+        "merchant": Expense.merchant,
+        "cashback": Expense.cashback_amount,
+    }
+    sort_col = sort_columns[sort]
+    ordering = sort_col.asc() if order == "asc" else sort_col.desc()
+
     rows = (
         await db.execute(
             select(Expense)
             .where(*filters)
-            .order_by(Expense.transaction_date.desc(), Expense.id.desc())
+            .order_by(ordering, Expense.id.desc())
             .offset((page - 1) * size)
             .limit(size)
         )
@@ -237,6 +278,8 @@ async def update_expense(
 ) -> ExpenseRead:
     expense = await _get_owned_expense(db, current_user.id, expense_id)
     original_month = expense.transaction_date
+    old_card_id = expense.credit_card_id
+    old_amount = Decimal(str(expense.amount))
 
     data = payload.model_dump(exclude_unset=True)
     category_provided = data.get("category") is not None
@@ -250,6 +293,13 @@ async def update_expense(
         if field == "category":
             continue
         setattr(expense, field, value)
+
+    # Keep card outstanding balances in sync with the (possibly moved) spend:
+    # back out the old card/amount, then apply the new one.
+    await _adjust_card_balance(db, current_user.id, old_card_id, -old_amount)
+    await _adjust_card_balance(
+        db, current_user.id, expense.credit_card_id, Decimal(str(expense.amount))
+    )
 
     # 1) Categorization.
     if category_provided:
@@ -265,6 +315,9 @@ async def update_expense(
         expense.is_ai_categorized = True
 
     # 2) Cashback (re-evaluate, excluding this expense from its own cap usage).
+    # A reward-rule choice only makes sense while a card is attached.
+    if expense.credit_card_id is None:
+        expense.reward_rule_id = None
     card = await _get_owned_card(db, current_user.id, expense.credit_card_id)
     cashback = await get_cashback_engine().evaluate(
         db,
@@ -273,6 +326,7 @@ async def update_expense(
         context=_spend_context(expense),
         transaction_date=expense.transaction_date,
         exclude_expense_id=expense.id,
+        chosen_rule_id=expense.reward_rule_id,
     )
     _apply_cashback(expense, cashback)
 
@@ -298,7 +352,11 @@ async def delete_expense(
 ) -> Response:
     expense = await _get_owned_expense(db, current_user.id, expense_id)
     month = expense.transaction_date
+    card_id = expense.credit_card_id
+    amount = Decimal(str(expense.amount))
     await db.delete(expense)
     await db.flush()
+    # Remove the spend from the card's outstanding balance.
+    await _adjust_card_balance(db, current_user.id, card_id, -amount)
     await _recompute_summaries(db, current_user.id, month)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

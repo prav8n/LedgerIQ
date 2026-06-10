@@ -8,6 +8,7 @@ export interface Expense {
   payment_method: string;
   transaction_date: string;
   credit_card_id: number | null;
+  reward_rule_id: number | null;
   is_online: boolean;
   is_recurring: boolean;
   is_ai_categorized: boolean;
@@ -27,6 +28,7 @@ export interface ExpenseInput {
   payment_method: string;
   transaction_date: string;
   credit_card_id?: number | null;
+  reward_rule_id?: number | null;
   is_online?: boolean;
   is_recurring?: boolean;
   notes?: string | null;
@@ -40,12 +42,19 @@ export interface PaginatedExpenses {
   pages: number;
 }
 
+export type ExpenseSort = 'date' | 'amount' | 'category' | 'merchant' | 'cashback';
+export type SortOrder = 'asc' | 'desc';
+
 export interface ExpenseFilters {
   page?: number;
   size?: number;
   q?: string;
   category?: string;
   payment_method?: string;
+  credit_card_id?: number;
+  rule_id?: number;
   date_from?: string;
   date_to?: string;
+  sort?: ExpenseSort;
+  order?: SortOrder;
 }

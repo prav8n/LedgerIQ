@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncGenerator
 
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -47,6 +48,16 @@ def _build_engine() -> AsyncEngine:
 
 
 engine: AsyncEngine = _build_engine()
+
+if settings.is_sqlite:
+    # SQLite ignores foreign keys unless explicitly enabled per connection, so
+    # ON DELETE SET NULL / CASCADE only fire when this pragma is set.
+    @event.listens_for(engine.sync_engine, "connect")
+    def _enable_sqlite_fks(dbapi_connection, _record) -> None:  # noqa: ANN001
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
 
 AsyncSessionLocal: async_sessionmaker[AsyncSession] = async_sessionmaker(
     bind=engine,

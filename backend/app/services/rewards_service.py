@@ -73,15 +73,38 @@ async def build_card_summary(
         )
     ).scalars().all()
 
+    # Accumulate per-rule units the same way the engine books them: an expense
+    # with a forced reward_rule_id uses only that rule; otherwise the single best
+    # qualifying rule applies (no stacking across rules for one transaction).
+    txn_rules = [r for r in rules if r.is_transactional]
+    by_id = {r.id: r for r in txn_rules}
+    units_by_rule: dict[int, Decimal] = {r.id: _ZERO for r in txn_rules}
+    for exp in month_expenses:
+        ctx = _ctx(exp)
+        chosen = getattr(exp, "reward_rule_id", None)
+        if chosen is not None and chosen in by_id:
+            forced = by_id[chosen]
+            meets_min = (
+                forced.min_txn_amount is None or ctx.amount >= forced.min_txn_amount
+            )
+            applicable = [forced] if meets_min else []
+        else:
+            qualifying = [r for r in txn_rules if r.spend_qualifies(ctx)]
+            best = (
+                max(qualifying, key=lambda r: r.reward_value_inr(ctx.amount))
+                if qualifying
+                else None
+            )
+            applicable = [best] if best is not None else []
+        for rule in applicable:
+            units_by_rule[rule.id] += rule.reward_units(ctx.amount)
+
     earnings: list[dict] = []
     total_value = _ZERO
-    for rule in rules:
-        if not rule.is_transactional:
-            continue
-        units = _ZERO
-        for exp in month_expenses:
-            if rule.spend_qualifies(_ctx(exp)):
-                units += rule.reward_units(Decimal(str(exp.amount)))
+    for rule in txn_rules:
+        units = units_by_rule[rule.id]
+        if units <= _ZERO:
+            continue  # only show rules that actually earned this month
         capped = rule.monthly_cap is not None and units > rule.monthly_cap
         if capped:
             units = rule.monthly_cap
@@ -147,3 +170,58 @@ async def build_card_summary(
         "fee_waiver": fee_waiver,
         "benefits": benefits,
     }
+
+
+async def recompute_card_expenses(
+    db: AsyncSession, *, user_id: int, card: CreditCard
+) -> int:
+    """Re-evaluate cashback for every expense on a card after its rules change.
+
+    Clears any forced reward-rule choice that no longer exists, then re-runs the
+    engine in chronological order (so monthly caps consume correctly), keeping
+    each expense's stored cashback consistent with the card's current rules.
+    """
+    engine = get_rewards_engine()
+    valid_rule_ids = {r.id for r in await engine.load_rules(db, card.id)}
+
+    expenses = (
+        await db.execute(
+            select(Expense)
+            .where(Expense.user_id == user_id, Expense.credit_card_id == card.id)
+            .order_by(Expense.transaction_date, Expense.id)
+        )
+    ).scalars().all()
+    if not expenses:
+        return 0
+
+    # Zero first so each cap re-accumulates cleanly in date order.
+    for exp in expenses:
+        exp.cashback_amount = _ZERO
+    await db.flush()
+
+    for exp in expenses:
+        if exp.reward_rule_id is not None and exp.reward_rule_id not in valid_rule_ids:
+            exp.reward_rule_id = None
+        result = await engine.evaluate(
+            db,
+            user_id=user_id,
+            card=card,
+            context=SpendContext(
+                amount=Decimal(str(exp.amount)),
+                merchant=(exp.merchant or "").lower(),
+                description=(exp.description or "").lower(),
+                payment_method=exp.payment_method,
+                is_online=exp.is_online,
+                category=getattr(exp.category, "value", "") or "",
+            ),
+            transaction_date=exp.transaction_date,
+            exclude_expense_id=exp.id,
+            chosen_rule_id=exp.reward_rule_id,
+        )
+        exp.cashback_eligible = result.eligible
+        exp.cashback_amount = result.amount
+        exp.cashback_type = result.reward_type
+        exp.cashback_rule = result.rule_id
+        await db.flush()
+
+    return len(expenses)
