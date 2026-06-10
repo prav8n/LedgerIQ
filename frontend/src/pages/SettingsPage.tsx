@@ -12,6 +12,11 @@ export function SettingsPage() {
   const setUser = useAuthStore((s) => s.setUser);
   const toast = useToast();
 
+  // Profile form (name + date of birth)
+  const [name, setName] = useState(user?.full_name ?? '');
+  const [dob, setDob] = useState(user?.date_of_birth ?? '');
+  const [profileBusy, setProfileBusy] = useState(false);
+
   // Change-email form
   const [newEmail, setNewEmail] = useState('');
   const [emailPw, setEmailPw] = useState('');
@@ -22,6 +27,23 @@ export function SettingsPage() {
   const [newPw, setNewPw] = useState('');
   const [confirmPw, setConfirmPw] = useState('');
   const [pwBusy, setPwBusy] = useState(false);
+
+  const submitProfile = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setProfileBusy(true);
+    try {
+      const updated = await authService.updateProfile({
+        full_name: name.trim() || null,
+        date_of_birth: dob || null,
+      });
+      setUser(updated);
+      toast.success('Profile updated');
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setProfileBusy(false);
+    }
+  };
 
   const submitEmail = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -81,6 +103,37 @@ export function SettingsPage() {
               Signed in as
             </Typography>
             <Typography variant="h6">{user?.email ?? '—'}</Typography>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent>
+            <Box component="form" onSubmit={submitProfile}>
+              <Typography variant="h6" mb={2}>
+                Profile
+              </Typography>
+              <Stack spacing={2}>
+                <TextField
+                  label="Name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  fullWidth
+                />
+                <TextField
+                  label="Date of birth"
+                  type="date"
+                  value={dob}
+                  onChange={(e) => setDob(e.target.value)}
+                  fullWidth
+                  InputLabelProps={{ shrink: true }}
+                />
+                <Box>
+                  <Button type="submit" variant="contained" disabled={profileBusy}>
+                    {profileBusy ? 'Saving…' : 'Save profile'}
+                  </Button>
+                </Box>
+              </Stack>
+            </Box>
           </CardContent>
         </Card>
 

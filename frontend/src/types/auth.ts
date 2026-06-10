@@ -4,6 +4,7 @@ export interface User {
   id: number;
   email: string;
   full_name: string | null;
+  date_of_birth: string | null;
   phone: string | null;
   currency: string;
   locale: string;

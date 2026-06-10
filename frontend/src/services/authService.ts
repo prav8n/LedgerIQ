@@ -44,4 +44,12 @@ export const authService = {
     const { data } = await api.post<User>('/auth/change-email', payload);
     return data;
   },
+
+  async updateProfile(payload: {
+    full_name?: string | null;
+    date_of_birth?: string | null;
+  }): Promise<User> {
+    const { data } = await api.put<User>('/auth/profile', payload);
+    return data;
+  },
 };
