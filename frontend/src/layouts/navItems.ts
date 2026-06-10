@@ -11,6 +11,7 @@ import AccountBalanceRoundedIcon from '@mui/icons-material/AccountBalanceRounded
 import PieChartRoundedIcon from '@mui/icons-material/PieChartRounded';
 import NotificationsRoundedIcon from '@mui/icons-material/NotificationsRounded';
 import InsightsRoundedIcon from '@mui/icons-material/InsightsRounded';
+import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded';
 import { paths } from '@/routes/paths';
 
 export interface NavItem {
@@ -33,6 +34,7 @@ export const navItems: NavItem[] = [
   { label: 'Net Worth', path: paths.netWorth, icon: PieChartRoundedIcon },
   { label: 'Notifications', path: paths.notifications, icon: NotificationsRoundedIcon },
   { label: 'Analytics', path: paths.analytics, icon: InsightsRoundedIcon },
+  { label: 'Settings', path: paths.settings, icon: SettingsRoundedIcon },
 ];
 
 /** Condensed list for the mobile bottom navigation (max 5). */

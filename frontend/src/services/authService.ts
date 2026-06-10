@@ -29,4 +29,19 @@ export const authService = {
     const { data } = await api.get<User>('/auth/profile');
     return data;
   },
+
+  async changePassword(payload: {
+    current_password: string;
+    new_password: string;
+  }): Promise<void> {
+    await api.post('/auth/change-password', payload);
+  },
+
+  async changeEmail(payload: {
+    new_email: string;
+    current_password: string;
+  }): Promise<User> {
+    const { data } = await api.post<User>('/auth/change-email', payload);
+    return data;
+  },
 };

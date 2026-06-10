@@ -48,6 +48,16 @@ class ChangePasswordRequest(BaseModel):
     new_password: str = PasswordStr
 
 
+class ChangeEmailRequest(BaseModel):
+    new_email: EmailStr
+    current_password: str
+
+    @field_validator("new_email")
+    @classmethod
+    def _normalize_email(cls, v: str) -> str:
+        return v.strip().lower()
+
+
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
 
