@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from datetime import date
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, String
+from sqlalchemy import Boolean, Date, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
@@ -32,6 +33,7 @@ class User(Base, TimestampMixin):
     )
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     full_name: Mapped[str | None] = mapped_column(String(120))
+    date_of_birth: Mapped[date | None] = mapped_column(Date)
     phone: Mapped[str | None] = mapped_column(String(20))
 
     currency: Mapped[str] = mapped_column(String(3), default="INR", nullable=False)

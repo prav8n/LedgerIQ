@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
@@ -37,6 +37,7 @@ class UserUpdate(BaseModel):
     """Editable profile fields (all optional / partial update)."""
 
     full_name: str | None = Field(default=None, max_length=120)
+    date_of_birth: date | None = None
     phone: str | None = Field(default=None, max_length=20)
     currency: str | None = Field(default=None, min_length=3, max_length=3)
     locale: str | None = Field(default=None, max_length=10)
@@ -80,6 +81,7 @@ class UserProfile(BaseModel):
     id: int
     email: EmailStr
     full_name: str | None
+    date_of_birth: date | None
     phone: str | None
     currency: str
     locale: str
