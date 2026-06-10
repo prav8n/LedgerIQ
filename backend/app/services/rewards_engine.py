@@ -219,27 +219,25 @@ class RewardsEngine:
         if not qualifying:
             return CashbackResult.none()
 
-        primary = qualifying[0]
-        total = _ZERO
-        for rule in qualifying:
-            value = rule.reward_value_inr(context.amount)
-            if rule.reward_type == RewardType.CASHBACK and rule.monthly_cap is not None:
-                used = await self._cashback_used_this_month(
-                    db,
-                    user_id=user_id,
-                    card_id=card.id,
-                    reference=transaction_date,
-                    exclude_expense_id=exclude_expense_id,
-                )
-                remaining = rule.monthly_cap - used
-                value = _ZERO if remaining <= _ZERO else min(value, _round(remaining))
-            total += value
+        # Best single rule wins — a transaction does not stack across rules.
+        best = max(qualifying, key=lambda r: r.reward_value_inr(context.amount))
+        value = best.reward_value_inr(context.amount)
+        if best.reward_type == RewardType.CASHBACK and best.monthly_cap is not None:
+            used = await self._cashback_used_this_month(
+                db,
+                user_id=user_id,
+                card_id=card.id,
+                reference=transaction_date,
+                exclude_expense_id=exclude_expense_id,
+            )
+            remaining = best.monthly_cap - used
+            value = _ZERO if remaining <= _ZERO else min(value, _round(remaining))
 
         return CashbackResult(
             eligible=True,
-            amount=_round(total),
-            reward_type=_TO_CARD_REWARD.get(primary.reward_type, CardRewardType.NONE),
-            rule_id=str(primary.id),
+            amount=_round(value),
+            reward_type=_TO_CARD_REWARD.get(best.reward_type, CardRewardType.NONE),
+            rule_id=str(best.id),
         )
 
     async def cap_status(

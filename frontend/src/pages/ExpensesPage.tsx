@@ -14,6 +14,7 @@ import {
   TableHead,
   TablePagination,
   TableRow,
+  TableSortLabel,
   TextField,
   Tooltip,
 } from '@mui/material';
@@ -45,7 +46,7 @@ import { useToast } from '@/hooks/useToast';
 import { getErrorMessage } from '@/services/api';
 import { expenseCategories, paymentMethods } from '@/constants/enums';
 import { formatDate, formatINR, humanize } from '@/utils/format';
-import type { Expense, ExpenseInput } from '@/types/expense';
+import type { Expense, ExpenseInput, ExpenseSort, SortOrder } from '@/types/expense';
 
 interface FormValues {
   amount: string;
@@ -83,16 +84,34 @@ export function ExpensesPage() {
   const [category, setCategory] = useState('');
   // null = all time; otherwise scope to the selected period (month/quarter/year/FY).
   const [periodFilter, setPeriodFilter] = useState<PeriodState | null>(null);
+  const [ccFilter, setCcFilter] = useState(''); // credit_card_id ('' = all)
+  const [ruleFilter, setRuleFilter] = useState(''); // rule_id ('' = all)
+  const [sort, setSort] = useState<ExpenseSort>('date');
+  const [order, setOrder] = useState<SortOrder>('desc');
 
   const periodRange = periodFilter ? periodBounds(periodFilter) : null;
   const filters = {
     page: page + 1,
     size,
+    sort,
+    order,
     ...(q ? { q } : {}),
     ...(category ? { category } : {}),
+    ...(ccFilter ? { credit_card_id: Number(ccFilter) } : {}),
+    ...(ruleFilter ? { rule_id: Number(ruleFilter) } : {}),
     ...(periodRange ? { date_from: periodRange.start, date_to: periodRange.end } : {}),
   };
   const { data, isLoading, isError, refetch } = useExpenses(filters);
+
+  const toggleSort = (field: ExpenseSort) => {
+    setPage(0);
+    if (sort === field) {
+      setOrder((o) => (o === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSort(field);
+      setOrder(field === 'merchant' || field === 'category' ? 'asc' : 'desc');
+    }
+  };
 
   const createM = useCreateExpense();
   const updateM = useUpdateExpense();
@@ -111,6 +130,21 @@ export function ExpensesPage() {
   // the cashback / reward points.
   const { data: cards } = creditCardHooks.useList();
   const cardOptions = (cards ?? []).map((c) => ({ value: String(c.id), label: c.card_name }));
+
+  // Maps + options for the Card / Reward-rule columns and filters.
+  const cardNameById = new Map((cards ?? []).map((c) => [c.id, c.card_name]));
+  const ruleNameById = new Map(
+    (cards ?? []).flatMap((c) => c.reward_rules.map((r) => [r.id, r.rule_name] as const)),
+  );
+  const filterRuleOptions = (cards ?? [])
+    .filter((c) => !ccFilter || String(c.id) === ccFilter)
+    .flatMap((c) =>
+      c.reward_rules.map((r) => ({
+        value: String(r.id),
+        label: ccFilter ? r.rule_name : `${c.card_name} · ${r.rule_name}`,
+      })),
+    );
+
   const paymentMethod = useWatch({ control, name: 'payment_method' });
   const creditCardId = useWatch({ control, name: 'credit_card_id' });
 
@@ -219,7 +253,7 @@ export function ExpensesPage() {
       />
 
       {/* Filters */}
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} mb={2}>
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} mb={2} useFlexGap flexWrap="wrap">
         <TextField
           size="small"
           label="Search merchant / description"
@@ -248,6 +282,47 @@ export function ExpensesPage() {
             </MenuItem>
           ))}
         </TextField>
+        {cardOptions.length > 0 && (
+          <TextField
+            select
+            size="small"
+            label="Credit card"
+            value={ccFilter}
+            onChange={(e) => {
+              setPage(0);
+              setCcFilter(e.target.value);
+              setRuleFilter(''); // rule list depends on the card
+            }}
+            sx={{ minWidth: 160 }}
+          >
+            <MenuItem value="">All cards</MenuItem>
+            {cardOptions.map((o) => (
+              <MenuItem key={o.value} value={o.value}>
+                {o.label}
+              </MenuItem>
+            ))}
+          </TextField>
+        )}
+        {filterRuleOptions.length > 0 && (
+          <TextField
+            select
+            size="small"
+            label="Reward rule"
+            value={ruleFilter}
+            onChange={(e) => {
+              setPage(0);
+              setRuleFilter(e.target.value);
+            }}
+            sx={{ minWidth: 180 }}
+          >
+            <MenuItem value="">All rules</MenuItem>
+            {filterRuleOptions.map((o) => (
+              <MenuItem key={o.value} value={o.value}>
+                {o.label}
+              </MenuItem>
+            ))}
+          </TextField>
+        )}
         {periodFilter ? (
           <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
             <PeriodSelector
@@ -300,12 +375,53 @@ export function ExpensesPage() {
           <Table>
             <TableHead>
               <TableRow>
-                <TableCell>Date</TableCell>
-                <TableCell>Merchant</TableCell>
-                <TableCell>Category</TableCell>
+                <TableCell sortDirection={sort === 'date' ? order : false}>
+                  <TableSortLabel
+                    active={sort === 'date'}
+                    direction={sort === 'date' ? order : 'asc'}
+                    onClick={() => toggleSort('date')}
+                  >
+                    Date
+                  </TableSortLabel>
+                </TableCell>
+                <TableCell sortDirection={sort === 'merchant' ? order : false}>
+                  <TableSortLabel
+                    active={sort === 'merchant'}
+                    direction={sort === 'merchant' ? order : 'asc'}
+                    onClick={() => toggleSort('merchant')}
+                  >
+                    Merchant
+                  </TableSortLabel>
+                </TableCell>
+                <TableCell sortDirection={sort === 'category' ? order : false}>
+                  <TableSortLabel
+                    active={sort === 'category'}
+                    direction={sort === 'category' ? order : 'asc'}
+                    onClick={() => toggleSort('category')}
+                  >
+                    Category
+                  </TableSortLabel>
+                </TableCell>
                 <TableCell>Payment</TableCell>
-                <TableCell align="right">Amount</TableCell>
-                <TableCell align="right">Cashback</TableCell>
+                <TableCell>Card / Rule</TableCell>
+                <TableCell align="right" sortDirection={sort === 'amount' ? order : false}>
+                  <TableSortLabel
+                    active={sort === 'amount'}
+                    direction={sort === 'amount' ? order : 'asc'}
+                    onClick={() => toggleSort('amount')}
+                  >
+                    Amount
+                  </TableSortLabel>
+                </TableCell>
+                <TableCell align="right" sortDirection={sort === 'cashback' ? order : false}>
+                  <TableSortLabel
+                    active={sort === 'cashback'}
+                    direction={sort === 'cashback' ? order : 'asc'}
+                    onClick={() => toggleSort('cashback')}
+                  >
+                    Cashback
+                  </TableSortLabel>
+                </TableCell>
                 <TableCell align="right">Actions</TableCell>
               </TableRow>
             </TableHead>
@@ -318,6 +434,23 @@ export function ExpensesPage() {
                     <Chip label={humanize(e.category)} size="small" variant="outlined" />
                   </TableCell>
                   <TableCell>{humanize(e.payment_method)}</TableCell>
+                  <TableCell>
+                    {e.credit_card_id != null ? (
+                      <>
+                        {cardNameById.get(e.credit_card_id) ?? 'Card'}
+                        {e.cashback_rule && ruleNameById.has(Number(e.cashback_rule)) ? (
+                          <Box
+                            component="span"
+                            sx={{ display: 'block', color: 'text.secondary', fontSize: 12 }}
+                          >
+                            {ruleNameById.get(Number(e.cashback_rule))}
+                          </Box>
+                        ) : null}
+                      </>
+                    ) : (
+                      '—'
+                    )}
+                  </TableCell>
                   <TableCell align="right">{formatINR(e.amount)}</TableCell>
                   <TableCell align="right">
                     {Number(e.cashback_amount) > 0 ? (

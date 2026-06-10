@@ -74,7 +74,6 @@ class Expense(Base, TimestampMixin):
     # Identifier of the cashback rule that matched, for transparency / audit.
     cashback_rule: Mapped[str | None] = mapped_column(String(60))
 
+    # Relationships
     user: Mapped["User"] = relationship(back_populates="expenses")
-    credit_card: Mapped["CreditCard | None"] = relationship(
-        back_populates="expenses"
-    )
+    credit_card: Mapped["CreditCard | None"] = relationship(back_populates="expenses")

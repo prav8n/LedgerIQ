@@ -11,6 +11,7 @@ from __future__ import annotations
 import math
 from datetime import date
 from decimal import Decimal
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
 from sqlalchemy import func, or_, select
@@ -188,10 +189,13 @@ async def list_expenses(
     category: ExpenseCategory | None = None,
     payment_method: PaymentMethod | None = None,
     credit_card_id: int | None = None,
+    rule_id: int | None = Query(None, description="Filter by the reward rule that earned"),
     date_from: date | None = None,
     date_to: date | None = None,
     min_amount: Decimal | None = Query(None, ge=0),
     max_amount: Decimal | None = Query(None, ge=0),
+    sort: Literal["date", "amount", "category", "merchant", "cashback"] = "date",
+    order: Literal["asc", "desc"] = "desc",
 ) -> PaginatedExpenses:
     filters = [Expense.user_id == current_user.id]
     if category is not None:
@@ -200,6 +204,9 @@ async def list_expenses(
         filters.append(Expense.payment_method == payment_method)
     if credit_card_id is not None:
         filters.append(Expense.credit_card_id == credit_card_id)
+    if rule_id is not None:
+        # cashback_rule stores the id of the rule that actually earned.
+        filters.append(Expense.cashback_rule == str(rule_id))
     if date_from is not None:
         filters.append(Expense.transaction_date >= date_from)
     if date_to is not None:
@@ -223,11 +230,21 @@ async def list_expenses(
     )
     total = int(total or 0)
 
+    sort_columns = {
+        "date": Expense.transaction_date,
+        "amount": Expense.amount,
+        "category": Expense.category,
+        "merchant": Expense.merchant,
+        "cashback": Expense.cashback_amount,
+    }
+    sort_col = sort_columns[sort]
+    ordering = sort_col.asc() if order == "asc" else sort_col.desc()
+
     rows = (
         await db.execute(
             select(Expense)
             .where(*filters)
-            .order_by(Expense.transaction_date.desc(), Expense.id.desc())
+            .order_by(ordering, Expense.id.desc())
             .offset((page - 1) * size)
             .limit(size)
         )
