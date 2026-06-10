@@ -38,6 +38,12 @@ class Settings(BaseSettings):
     API_V1_PREFIX: str = "/api/v1"
     ENVIRONMENT: Literal["local", "development", "staging", "production"] = "local"
     DEBUG: bool = True
+    # When false, the /auth/register endpoint is disabled (single-user lockdown).
+    ALLOW_REGISTRATION: bool = True
+
+    @property
+    def is_production(self) -> bool:
+        return self.ENVIRONMENT == "production"
 
     # --------------------------------------------------------------- server
     HOST: str = "0.0.0.0"
