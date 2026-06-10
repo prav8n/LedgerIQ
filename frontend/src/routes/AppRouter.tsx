@@ -17,6 +17,7 @@ import { EMIsPage } from '@/pages/EMIsPage';
 import { NetWorthPage } from '@/pages/NetWorthPage';
 import { NotificationsPage } from '@/pages/NotificationsPage';
 import { AnalyticsPage } from '@/pages/AnalyticsPage';
+import { SettingsPage } from '@/pages/SettingsPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 
 export function AppRouter() {
@@ -42,6 +43,7 @@ export function AppRouter() {
           <Route path={paths.netWorth} element={<NetWorthPage />} />
           <Route path={paths.notifications} element={<NotificationsPage />} />
           <Route path={paths.analytics} element={<AnalyticsPage />} />
+          <Route path={paths.settings} element={<SettingsPage />} />
         </Route>
       </Route>
 

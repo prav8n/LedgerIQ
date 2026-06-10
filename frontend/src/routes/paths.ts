@@ -13,6 +13,7 @@ export const paths = {
   netWorth: '/net-worth',
   notifications: '/notifications',
   analytics: '/analytics',
+  settings: '/settings',
 } as const;
 
 export type AppPath = (typeof paths)[keyof typeof paths];

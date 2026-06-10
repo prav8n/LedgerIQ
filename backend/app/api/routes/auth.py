@@ -19,6 +19,7 @@ from app.core.security import (
 from app.models.user import User
 from app.schemas.user import (
     AuthResponse,
+    ChangeEmailRequest,
     ChangePasswordRequest,
     ForgotPasswordRequest,
     MessageResponse,
@@ -153,6 +154,36 @@ async def change_password(
     current_user.hashed_password = hash_password(payload.new_password)
     db.add(current_user)
     return MessageResponse(message="Password updated successfully")
+
+
+@router.post(
+    "/change-email",
+    response_model=UserProfile,
+    summary="Change email (authenticated)",
+)
+async def change_email(
+    payload: ChangeEmailRequest, current_user: CurrentUser, db: SessionDep
+) -> UserProfile:
+    if not verify_password(payload.current_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect"
+        )
+    if payload.new_email == current_user.email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New email is the same as the current one",
+        )
+    existing = await _get_user_by_email(db, payload.new_email)
+    if existing is not None and existing.id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An account with this email already exists",
+        )
+    current_user.email = payload.new_email
+    db.add(current_user)
+    await db.flush()
+    await db.refresh(current_user)
+    return UserProfile.model_validate(current_user)
 
 
 @router.get("/profile", response_model=UserProfile, summary="Get current profile")
