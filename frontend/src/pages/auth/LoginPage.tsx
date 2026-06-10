@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { Link as RouterLink, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { Button, Link, Stack, TextField, Typography } from '@mui/material';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { Button, Stack, TextField } from '@mui/material';
 import { AuthCard } from '@/pages/auth/AuthCard';
 import { authService } from '@/services/authService';
 import { getErrorMessage } from '@/services/api';
@@ -75,12 +75,6 @@ export function LoginPage() {
           <Button type="submit" variant="contained" size="large" disabled={submitting}>
             {submitting ? 'Signing in…' : 'Sign in'}
           </Button>
-          <Typography variant="body2" textAlign="center" color="text.secondary">
-            Don&apos;t have an account?{' '}
-            <Link component={RouterLink} to={paths.register} fontWeight={600}>
-              Create one
-            </Link>
-          </Typography>
         </Stack>
       </form>
     </AuthCard>

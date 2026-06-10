@@ -51,6 +51,11 @@ def _tokens_for(user: User) -> Token:
     summary="Register a new user and return tokens",
 )
 async def register(payload: UserRegister, db: SessionDep) -> AuthResponse:
+    if not settings.ALLOW_REGISTRATION:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Registration is disabled",
+        )
     if await _get_user_by_email(db, payload.email):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

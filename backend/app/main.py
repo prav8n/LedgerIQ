@@ -40,13 +40,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 def create_app() -> FastAPI:
     """Construct and configure the FastAPI application."""
+    # API docs are hidden in production to reduce the exposed attack surface.
+    docs_enabled = not settings.is_production
     app = FastAPI(
         title=settings.PROJECT_NAME,
         description=settings.PROJECT_DESCRIPTION,
         version=settings.VERSION,
-        openapi_url=f"{settings.API_V1_PREFIX}/openapi.json",
-        docs_url="/docs",
-        redoc_url="/redoc",
+        openapi_url=f"{settings.API_V1_PREFIX}/openapi.json" if docs_enabled else None,
+        docs_url="/docs" if docs_enabled else None,
+        redoc_url="/redoc" if docs_enabled else None,
         lifespan=lifespan,
     )
 

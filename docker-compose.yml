@@ -26,6 +26,9 @@ services:
       ENVIRONMENT: production
       DEBUG: "false"
       ENABLE_SCHEDULER: "true"
+      # Single-user lockdown: no public sign-ups (set true only to create the
+      # first account, then back to false).
+      ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-false}
       # Browser hits the API same-origin via nginx, but set this for safety.
       CORS_ORIGINS: ${PUBLIC_ORIGIN:-http://localhost}
       # Optional LLM-backed AI (key stays server-side; empty => rule-based).
@@ -51,7 +54,9 @@ services:
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     ports:
-      - "${HTTP_PORT:-80}:80"
+      # Bind to localhost only — the Cloudflare tunnel reaches nginx over the
+      # internal Docker network (nginx:80), so nothing is exposed to the network.
+      - "127.0.0.1:${HTTP_PORT:-80}:80"
     depends_on:
       - backend
       - frontend
